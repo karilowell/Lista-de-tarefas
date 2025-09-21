@@ -59,26 +59,35 @@ function App() {
   const [items, setItems] = useLocalStorageList(STORAGE_KEY, []);
   const [filter, setFilter] = useState('all'); // all | active | completed
   const [now, setNow] = useState(Date.now());
+  const [calMonth, setCalMonth] = useState(() => { const d=new Date(); d.setDate(1); return d; });
+  const [selectedDate, setSelectedDate] = useState(null); // ms at 00:00
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(t);
   }, []);
 
   const filtered = useMemo(() => {
+    let arr = items;
     switch (filter) {
-      case 'active': return items.filter(i => !i.completed);
-      case 'completed': return items.filter(i => i.completed);
-      default: return items;
+      case 'active': arr = arr.filter(i => !i.completed); break;
+      case 'completed': arr = arr.filter(i => i.completed); break;
+      default: break;
     }
-  }, [items, filter]);
+    if (selectedDate) {
+      const start = new Date(selectedDate); start.setHours(0,0,0,0);
+      const s = start.getTime(); const e = s + 86400000 - 1;
+      arr = arr.filter(i => i.dueAt && i.dueAt >= s && i.dueAt <= e);
+    }
+    return arr;
+  }, [items, filter, selectedDate]);
 
   const remaining = useMemo(() => items.filter(i => !i.completed).length, [items]);
   const total = items.length;
 
-  const addItem = (text) => {
+  const addItem = (text, dueAt) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    setItems(prev => [{ id: uid(), text: trimmed, completed: false, createdAt: Date.now() }, ...prev]);
+    setItems(prev => [{ id: uid(), text: trimmed, completed: false, createdAt: Date.now(), dueAt: dueAt ?? null }, ...prev]);
   };
 
   const toggleItem = (id) => {
@@ -111,6 +120,7 @@ function App() {
     <main className="app" aria-labelledby="app-title">
       <h1 id="app-title">Lista de Tarefas</h1>
       <TodoForm onAdd={addItem} />
+      <Calendar items={items} month={calMonth} onMonthChange={setCalMonth} selectedDate={selectedDate} onSelectDate={setSelectedDate} now={now} />
       <Toolbar filter={filter} onFilterChange={setFilter} onClearCompleted={clearCompleted} />
       <ul id="todo-list" className="todo-list" aria-live="polite" aria-relevant="additions removals">
         {filtered.map(item => (
@@ -122,13 +132,71 @@ function App() {
   );
 }
 
+function Calendar({ items, month, onMonthChange, selectedDate, onSelectDate, now }) {
+  const monthsFmt = useMemo(() => new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }), []);
+  const weekdayFmt = useMemo(() => new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }), []);
+  const startOfDay = (msOrDate) => { const d = new Date(msOrDate); d.setHours(0,0,0,0); return d.getTime(); };
+  const addMonths = (date, n) => { const d = new Date(date); d.setDate(1); d.setMonth(d.getMonth()+n); return d; };
+
+  const firstDay = useMemo(() => new Date(month.getFullYear(), month.getMonth(), 1), [month]);
+  const firstWeekday = firstDay.getDay();
+  const gridStart = useMemo(() => { const g=new Date(firstDay); g.setDate(firstDay.getDate()-firstWeekday); return g; }, [firstDay, firstWeekday]);
+  const days = useMemo(() => Array.from({length:42}, (_,i) => { const d=new Date(gridStart); d.setDate(gridStart.getDate()+i); return d; }), [gridStart]);
+
+  const counts = useMemo(() => {
+    const m = new Map();
+    for (const it of items) {
+      if (!it?.dueAt || it.completed) continue;
+      const k = startOfDay(it.dueAt);
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [items]);
+
+  const title = monthsFmt.format(firstDay);
+  const weekdays = useMemo(() => Array.from({length:7}, (_,i) => weekdayFmt.format(new Date(2021,7,1+i))), [weekdayFmt]);
+  const selected = selectedDate ? startOfDay(selectedDate) : null;
+
+  return (
+    <section className="calendar" aria-label="Calendário mensal">
+      <div className="cal-header">
+        <div className="cal-title">{title.charAt(0).toUpperCase()+title.slice(1)}</div>
+        <div className="cal-nav">
+          <button className="btn" type="button" onClick={() => onMonthChange(addMonths(month, -1))}>◀</button>
+          <button className="btn" type="button" onClick={() => { const d=new Date(); d.setDate(1); onMonthChange(d); onSelectDate(startOfDay(now)); }}>Hoje</button>
+          <button className="btn" type="button" onClick={() => onMonthChange(addMonths(month, 1))}>▶</button>
+        </div>
+      </div>
+      <div className="cal-grid">
+        {weekdays.map((w,idx) => (<div key={`w-${idx}`} className="cal-weekday">{w}</div>))}
+        {days.map((d,idx) => {
+          const inMonth = d.getMonth() === firstDay.getMonth();
+          const key = startOfDay(d);
+          const count = counts.get(key) || 0;
+          const overdue = count>0 && key < startOfDay(now);
+          const sel = selected != null && key === selected;
+          return (
+            <div key={idx} className={`cal-cell${inMonth?'':' out'}${sel?' selected':''}`} onClick={() => onSelectDate(sel ? null : key)}>
+              <div className="day">{d.getDate()}</div>
+              <div className={`count${overdue?' overdue':''}`}>{count ? `${count} pend.` : ''}</div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function TodoForm({ onAdd }) {
   const [value, setValue] = useState('');
+  const [due, setDue] = useState('');
   const inputRef = useRef(null);
   const submit = (e) => {
     e.preventDefault();
-    onAdd(value);
+    const dueAt = due ? new Date(`${due}T00:00:00`).getTime() : null;
+    onAdd(value, Number.isNaN(dueAt) ? null : dueAt);
     setValue('');
+    setDue('');
     if (inputRef.current) inputRef.current.focus();
   };
   return (
@@ -145,6 +213,14 @@ function TodoForm({ onAdd }) {
         value={value}
         onChange={e => setValue(e.target.value)}
         ref={inputRef}
+      />
+      <label className="sr-only" htmlFor="todo-due">Data de vencimento</label>
+      <input
+        id="todo-due"
+        name="due"
+        type="date"
+        value={due}
+        onChange={e => setDue(e.target.value)}
       />
       <button type="submit" className="btn primary">Adicionar</button>
     </form>
@@ -231,6 +307,27 @@ function TodoItem({ item, now, onToggle, onDelete, onEdit }) {
                 </>
               ) : null;
             })()}
+            {item.dueAt ? (
+              <>
+                <span className="meta-sep" aria-hidden="true">•</span>
+                {(() => {
+                  const overdue = !item.completed && item.dueAt < now;
+                  const prefix = overdue ? 'Vencida' : 'Vence';
+                  return (
+                    <>
+                      <time
+                        className={`meta due${overdue ? ' overdue' : ''}`}
+                        dateTime={new Date(item.dueAt).toISOString()}
+                        title={formatDateTime(item.dueAt)}
+                      >
+                        {prefix} {relativeTime(item.dueAt, now)}
+                      </time>
+                      <span className="meta-exact" aria-hidden="true"> — {formatDateTime(item.dueAt)}</span>
+                    </>
+                  );
+                })()}
+              </>
+            ) : null}
             {item.editedAt ? (
               <>
                 <span className="meta-sep" aria-hidden="true">•</span>

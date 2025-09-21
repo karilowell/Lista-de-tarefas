@@ -20,6 +20,8 @@
       <form id="todo-form" class="todo-form" autocomplete="off">
         <label class="sr-only" for="todo-input">Nova tarefa</label>
         <input id="todo-input" name="todo" type="text" placeholder="Adicionar nova tarefa..." minlength="1" maxlength="200" required />
+        <label class="sr-only" for="todo-due">Data de vencimento</label>
+        <input id="todo-due" name="due" type="date" />
         <button type="submit" class="btn primary">Adicionar</button>
       </form>
 
@@ -32,6 +34,10 @@
         <div class="actions">
           <button type="button" id="clear-completed" class="btn">Limpar concluídas</button>
         </div>
+      </section>
+
+      <section id="calendar" class="calendar" aria-label="Calendário mensal">
+        <!-- Calendário gerado pelo JS -->
       </section>
 
       <ul id="todo-list" class="todo-list" aria-live="polite" aria-relevant="additions removals">
@@ -48,4 +54,3 @@
     <script src="app.js"></script>
   </body>
   </html>
-
