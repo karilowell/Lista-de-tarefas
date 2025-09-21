@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lista de Tarefas</title>
+    <meta name="description" content="Uma lista de tarefas simples com filtros, edição e persistência no navegador." />
+    <meta name="theme-color" content="#121821" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Lista de Tarefas" />
+    <meta property="og:description" content="Gerencie tarefas: adicionar, concluir, editar e filtrar." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' ry='12' fill='%23121821'/%3E%3Cpath d='M22 33l6 6 14-14' stroke='%237ed957' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <noscript>Este aplicativo precisa de JavaScript para funcionar.</noscript>
+    <main class="app" aria-labelledby="app-title">
+      <h1 id="app-title">Lista de Tarefas</h1>
+
+      <form id="todo-form" class="todo-form" autocomplete="off">
+        <label class="sr-only" for="todo-input">Nova tarefa</label>
+        <input id="todo-input" name="todo" type="text" placeholder="Adicionar nova tarefa..." minlength="1" maxlength="200" required />
+        <button type="submit" class="btn primary">Adicionar</button>
+      </form>
+
+      <section class="toolbar" aria-label="Filtros e ações">
+        <div class="filters" role="tablist" aria-label="Filtros">
+          <button type="button" class="tab active" data-filter="all" aria-selected="true">Todas</button>
+          <button type="button" class="tab" data-filter="active" aria-selected="false">Ativas</button>
+          <button type="button" class="tab" data-filter="completed" aria-selected="false">Concluídas</button>
+        </div>
+        <div class="actions">
+          <button type="button" id="clear-completed" class="btn">Limpar concluídas</button>
+        </div>
+      </section>
+
+      <ul id="todo-list" class="todo-list" aria-live="polite" aria-relevant="additions removals">
+        <!-- Itens de tarefas gerados pelo JS -->
+      </ul>
+
+      <footer class="statusbar" aria-live="polite">
+        <span><strong id="count-remaining">0</strong> restantes</span>
+        <span aria-hidden="true">•</span>
+        <span><strong id="count-total">0</strong> no total</span>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
+

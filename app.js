@@ -1,0 +1,325 @@
+(() => {
+  'use strict';
+
+  const STORAGE_KEY = 'todo-items-v1';
+  const state = {
+    items: [],
+    filter: 'all' // 'all' | 'active' | 'completed'
+  };
+
+  // DOM refs
+  const form = document.getElementById('todo-form');
+  const input = document.getElementById('todo-input');
+  const list = document.getElementById('todo-list');
+  const btnsFilter = Array.from(document.querySelectorAll('.filters .tab'));
+  const clearCompletedBtn = document.getElementById('clear-completed');
+  const countRemainingEl = document.getElementById('count-remaining');
+  const countTotalEl = document.getElementById('count-total');
+
+  // Persistence
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        state.items = parsed.filter(Boolean).map(i => {
+          if (i && typeof i === 'object') {
+            if (i.createdAt == null) i.createdAt = Date.now();
+            if (i.completed) {
+              if (i.completedAt == null) i.completedAt = Date.now();
+            } else {
+              i.completedAt = null;
+            }
+            return i;
+          }
+          return i;
+        });
+        // Persist back if we filled defaults
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items)); } catch {}
+      }
+    } catch {}
+  }
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+    } catch {}
+  }
+
+  // Helpers
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const formatDateTime = (ms) => {
+    try {
+      const d = new Date(ms);
+      return new Intl.DateTimeFormat('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      }).format(d);
+    } catch { return ''; }
+  };
+  const relativeTime = (ms) => {
+    try {
+      const rtf = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
+      const now = Date.now();
+      let delta = Math.round((ms - now) / 1000); // seconds
+      const abs = Math.abs(delta);
+      if (abs < 60) return rtf.format(delta, 'second');
+      delta = Math.round(delta / 60); // minutes
+      if (Math.abs(delta) < 60) return rtf.format(delta, 'minute');
+      delta = Math.round(delta / 60); // hours
+      if (Math.abs(delta) < 24) return rtf.format(delta, 'hour');
+      delta = Math.round(delta / 24); // days
+      if (Math.abs(delta) < 30) return rtf.format(delta, 'day');
+      const months = Math.round(delta / 30);
+      if (Math.abs(months) < 12) return rtf.format(months, 'month');
+      const years = Math.round(months / 12);
+      return rtf.format(years, 'year');
+    } catch { return ''; }
+  };
+  const formatDateTime = (ms) => {
+    try {
+      const d = new Date(ms);
+      return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(d);
+    } catch { return ''; }
+  };
+
+  function addItem(text) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    state.items.unshift({
+      id: uid(),
+      text: trimmed,
+      completed: false,
+      createdAt: Date.now()
+    });
+    save();
+    render();
+  }
+
+  function toggleItem(id) {
+    const item = state.items.find(i => i.id === id);
+    if (!item) return;
+    const newCompleted = !item.completed;
+    item.completed = newCompleted;
+    item.completedAt = newCompleted ? Date.now() : null;
+    save();
+    render();
+  }
+
+  function deleteItem(id) {
+    const idx = state.items.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    state.items.splice(idx, 1);
+    save();
+    render();
+  }
+
+  function editItem(id, newText) {
+    const item = state.items.find(i => i.id === id);
+    if (!item) return;
+    const trimmed = newText.trim();
+    if (!trimmed) return; // ignore empty edits
+    if (trimmed === item.text) return; // no-op if unchanged
+    item.text = trimmed;
+    item.editedAt = Date.now();
+    save();
+    render();
+  }
+
+  function clearCompleted() {
+    state.items = state.items.filter(i => !i.completed);
+    save();
+    render();
+  }
+
+  function setFilter(filter) {
+    state.filter = filter;
+    render();
+  }
+
+  function filteredItems() {
+    switch (state.filter) {
+      case 'active':
+        return state.items.filter(i => !i.completed);
+      case 'completed':
+        return state.items.filter(i => i.completed);
+      default:
+        return state.items;
+    }
+  }
+
+  // Rendering
+  function render() {
+    // counters
+    const remaining = state.items.filter(i => !i.completed).length;
+    countRemainingEl.textContent = String(remaining);
+    countTotalEl.textContent = String(state.items.length);
+
+    // filters UI state
+    btnsFilter.forEach(b => {
+      const active = b.dataset.filter === state.filter;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', String(active));
+    });
+
+    // list
+    list.innerHTML = '';
+    const items = filteredItems();
+    for (const item of items) {
+      list.appendChild(renderItem(item));
+    }
+  }
+
+  function renderItem(item) {
+    const li = document.createElement('li');
+    li.className = 'todo-item' + (item.completed ? ' completed' : '');
+    li.dataset.id = item.id;
+
+    const label = document.createElement('label');
+    label.className = 'todo';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = item.completed;
+    cb.setAttribute('aria-label', 'Concluir tarefa');
+    cb.addEventListener('change', () => toggleItem(item.id));
+
+    const text = document.createElement('span');
+    text.className = 'text';
+    text.textContent = item.text;
+    text.title = item.text;
+    text.addEventListener('dblclick', () => startInlineEdit(li, item));
+
+    const timeEl = document.createElement('time');
+    timeEl.className = 'meta';
+    const stamp = item.completed && item.completedAt ? { ts: item.completedAt, label: 'Concluída' } : { ts: item.createdAt, label: 'Criada' };
+    if (stamp.ts) {
+      timeEl.dateTime = new Date(stamp.ts).toISOString();
+      timeEl.setAttribute('data-ts', String(stamp.ts));
+      timeEl.setAttribute('data-kind', stamp.label);
+      timeEl.title = formatDateTime(stamp.ts);
+      timeEl.textContent = `${stamp.label} ${relativeTime(stamp.ts)}`;
+    }
+    const exactSpan = document.createElement('span');
+    exactSpan.className = 'meta-exact';
+    exactSpan.setAttribute('aria-hidden', 'true');
+    exactSpan.textContent = stamp.ts ? ` — ${formatDateTime(stamp.ts)}` : '';
+
+    label.appendChild(cb);
+    label.appendChild(text);
+    if (timeEl.textContent) {
+      label.appendChild(timeEl);
+      label.appendChild(exactSpan);
+    }
+    if (item.editedAt) {
+      const sep = document.createElement('span');
+      sep.className = 'meta-sep';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.textContent = '•';
+      label.appendChild(sep);
+      const timeEdit = document.createElement('time');
+      timeEdit.className = 'meta';
+      timeEdit.dateTime = new Date(item.editedAt).toISOString();
+      timeEdit.setAttribute('data-ts', String(item.editedAt));
+      timeEdit.setAttribute('data-kind', 'Editada');
+      timeEdit.title = formatDateTime(item.editedAt);
+      timeEdit.textContent = `Editada ${relativeTime(item.editedAt)}`;
+      label.appendChild(timeEdit);
+      const exactEdit = document.createElement('span');
+      exactEdit.className = 'meta-exact';
+      exactEdit.setAttribute('aria-hidden', 'true');
+      exactEdit.textContent = ` — ${formatDateTime(item.editedAt)}`;
+      label.appendChild(exactEdit);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'item-actions';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn';
+    editBtn.type = 'button';
+    editBtn.textContent = 'Editar';
+    editBtn.addEventListener('click', () => startInlineEdit(li, item));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn danger';
+    delBtn.type = 'button';
+    delBtn.textContent = 'Remover';
+    delBtn.addEventListener('click', () => deleteItem(item.id));
+
+    actions.appendChild(editBtn);
+    actions.appendChild(delBtn);
+
+    li.appendChild(label);
+    li.appendChild(actions);
+    return li;
+  }
+
+  function startInlineEdit(li, item) {
+    // Prevent duplicate editors
+    if (li.querySelector('.text-input')) return;
+
+    const label = li.querySelector('.todo');
+    const actions = li.querySelector('.item-actions');
+    const textSpan = li.querySelector('.text');
+
+    const inputEdit = document.createElement('input');
+    inputEdit.type = 'text';
+    inputEdit.value = item.text;
+    inputEdit.className = 'text-input';
+    inputEdit.setAttribute('aria-label', 'Editar tarefa');
+
+    // Replace text with input
+    label.replaceChild(inputEdit, textSpan);
+    inputEdit.focus();
+    inputEdit.setSelectionRange(item.text.length, item.text.length);
+
+    // Temporarily disable buttons while editing
+    actions.querySelectorAll('button').forEach(b => b.setAttribute('disabled', 'true'));
+
+    const commit = () => {
+      const newText = inputEdit.value;
+      // Restore UI first to keep focus behavior smooth
+      label.replaceChild(textSpan, inputEdit);
+      actions.querySelectorAll('button').forEach(b => b.removeAttribute('disabled'));
+      editItem(item.id, newText);
+    };
+    const cancel = () => {
+      label.replaceChild(textSpan, inputEdit);
+      actions.querySelectorAll('button').forEach(b => b.removeAttribute('disabled'));
+    };
+
+    inputEdit.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') commit();
+      else if (e.key === 'Escape') cancel();
+    });
+    inputEdit.addEventListener('blur', commit);
+  }
+
+  // Events
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    addItem(input.value);
+    input.value = '';
+    input.focus();
+  });
+
+  btnsFilter.forEach(btn => btn.addEventListener('click', () => setFilter(btn.dataset.filter)));
+  clearCompletedBtn.addEventListener('click', clearCompleted);
+
+  // Init
+  load();
+  render();
+  function refreshRelativeTimes(){
+    document.querySelectorAll('time.meta[data-ts]').forEach((el) => {
+      const ts = Number(el.getAttribute('data-ts'));
+      const kind = el.getAttribute('data-kind') || '';
+      if (!Number.isNaN(ts)) {
+        el.textContent = `${kind} ${relativeTime(ts)}`;
+        el.title = formatDateTime(ts);
+      }
+    });
+  }
+  refreshRelativeTimes();
+  setInterval(refreshRelativeTimes, 60000);
+})();
