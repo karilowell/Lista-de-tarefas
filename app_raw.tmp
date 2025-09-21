@@ -10,13 +10,11 @@
   // DOM refs
   const form = document.getElementById('todo-form');
   const input = document.getElementById('todo-input');
-  const inputDue = document.getElementById('todo-due');
   const list = document.getElementById('todo-list');
   const btnsFilter = Array.from(document.querySelectorAll('.filters .tab'));
   const clearCompletedBtn = document.getElementById('clear-completed');
   const countRemainingEl = document.getElementById('count-remaining');
   const countTotalEl = document.getElementById('count-total');
-  const calendarEl = document.getElementById('calendar');
 
   // Persistence
   function load() {
@@ -78,12 +76,6 @@
       return rtf.format(years, 'year');
     } catch { return ''; }
   };
-  const parseDateOnly = (str) => {
-    if (!str) return null;
-    const d = new Date(`${str}T00:00:00`);
-    const t = d.getTime();
-    return Number.isNaN(t) ? null : t;
-  };
   const formatDateTime = (ms) => {
     try {
       const d = new Date(ms);
@@ -94,13 +86,11 @@
   function addItem(text) {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const dueAt = parseDateOnly(inputDue ? inputDue.value : '');
     state.items.unshift({
       id: uid(),
       text: trimmed,
       completed: false,
-      createdAt: Date.now(),
-      dueAt: dueAt || null
+      createdAt: Date.now()
     });
     save();
     render();
@@ -148,18 +138,14 @@
   }
 
   function filteredItems() {
-    let arr = state.items;
     switch (state.filter) {
-      case 'active': arr = arr.filter(i => !i.completed); break;
-      case 'completed': arr = arr.filter(i => i.completed); break;
-      default: break;
+      case 'active':
+        return state.items.filter(i => !i.completed);
+      case 'completed':
+        return state.items.filter(i => i.completed);
+      default:
+        return state.items;
     }
-    if (state.selectedDate) {
-      const start = startOfDay(state.selectedDate);
-      const end = start + 86400000 - 1;
-      arr = arr.filter(i => i.dueAt && i.dueAt >= start && i.dueAt <= end);
-    }
-    return arr;
   }
 
   // Rendering
@@ -176,91 +162,12 @@
       b.setAttribute('aria-selected', String(active));
     });
 
-    // calendar
-    renderCalendar();
-
     // list
     list.innerHTML = '';
     const items = filteredItems();
     for (const item of items) {
       list.appendChild(renderItem(item));
     }
-  }
-
-  // Calendar helpers
-  const monthsFmt = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
-  const weekdayFmt = new Intl.DateTimeFormat('pt-BR', { weekday: 'short' });
-  const startOfDay = (msOrDate) => { const d = new Date(msOrDate); d.setHours(0,0,0,0); return d.getTime(); };
-  const addMonths = (date, n) => { const d = new Date(date); d.setDate(1); d.setMonth(d.getMonth()+n); return d; };
-  if (!state.calendarMonth) state.calendarMonth = new Date();
-  state.calendarMonth.setDate(1);
-
-  function renderCalendar() {
-    if (!calendarEl) return;
-    const monthDate = state.calendarMonth;
-    const firstDay = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-    const firstWeekday = firstDay.getDay(); // 0=Sun
-    const gridStart = new Date(firstDay); gridStart.setDate(firstDay.getDate() - firstWeekday);
-    const days = [];
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
-      days.push(d);
-    }
-    // counts per day (incomplete only)
-    const counts = new Map();
-    for (const it of state.items) {
-      if (!it.dueAt || it.completed) continue;
-      const key = startOfDay(it.dueAt);
-      counts.set(key, (counts.get(key) || 0) + 1);
-    }
-
-    const title = monthsFmt.format(firstDay);
-    const weekdays = [];
-    for (let i=0;i<7;i++) {
-      const wd = new Date(2021,7,1 + i); // arbitrary week starting Sun
-      weekdays.push(weekdayFmt.format(wd));
-    }
-
-    const selected = state.selectedDate ? startOfDay(state.selectedDate) : null;
-
-    const frag = document.createDocumentFragment();
-    const header = document.createElement('div'); header.className = 'cal-header';
-    const titleEl = document.createElement('div'); titleEl.className = 'cal-title'; titleEl.textContent = title.charAt(0).toUpperCase() + title.slice(1);
-    const nav = document.createElement('div'); nav.className = 'cal-nav';
-    const prev = document.createElement('button'); prev.className = 'btn'; prev.type = 'button'; prev.textContent = '◀'; prev.addEventListener('click', () => { state.calendarMonth = addMonths(state.calendarMonth, -1); render(); });
-    const today = document.createElement('button'); today.className = 'btn'; today.type = 'button'; today.textContent = 'Hoje'; today.addEventListener('click', () => { state.calendarMonth = new Date(); state.calendarMonth.setDate(1); state.selectedDate = startOfDay(Date.now()); render(); });
-    const next = document.createElement('button'); next.className = 'btn'; next.type = 'button'; next.textContent = '▶'; next.addEventListener('click', () => { state.calendarMonth = addMonths(state.calendarMonth, 1); render(); });
-    nav.appendChild(prev); nav.appendChild(today); nav.appendChild(next);
-    header.appendChild(titleEl); header.appendChild(nav);
-
-    const grid = document.createElement('div'); grid.className = 'cal-grid';
-    for (const w of weekdays) {
-      const we = document.createElement('div'); we.className = 'cal-weekday'; we.textContent = w;
-      grid.appendChild(we);
-    }
-    for (const d of days) {
-      const cell = document.createElement('div');
-      const inMonth = d.getMonth() === firstDay.getMonth();
-      cell.className = 'cal-cell' + (inMonth ? '' : ' out');
-      const dayNum = document.createElement('div'); dayNum.className = 'day'; dayNum.textContent = String(d.getDate());
-      const key = startOfDay(d);
-      const count = counts.get(key) || 0;
-      const countEl = document.createElement('div'); countEl.className = 'count' + ((count>0 && key < startOfDay(Date.now())) ? ' overdue' : '');
-      countEl.textContent = count ? `${count} pend.` : '';
-      if (selected != null && key === selected) cell.classList.add('selected');
-      cell.appendChild(dayNum); cell.appendChild(countEl);
-      cell.addEventListener('click', () => {
-        const k = startOfDay(d);
-        state.selectedDate = (selected != null && selected === k) ? null : k;
-        render();
-      });
-      grid.appendChild(cell);
-    }
-
-    calendarEl.innerHTML = '';
-    frag.appendChild(header);
-    frag.appendChild(grid);
-    calendarEl.appendChild(frag);
   }
 
   function renderItem(item) {
@@ -303,30 +210,6 @@
     if (timeEl.textContent) {
       label.appendChild(timeEl);
       label.appendChild(exactSpan);
-    }
-    // Due date (calendar) display
-    if (item.dueAt) {
-      const sepDue = document.createElement('span');
-      sepDue.className = 'meta-sep';
-      sepDue.setAttribute('aria-hidden', 'true');
-      sepDue.textContent = '•';
-      label.appendChild(sepDue);
-
-      const due = document.createElement('time');
-      const overdue = !item.completed && item.dueAt < Date.now();
-      due.className = 'meta due' + (overdue ? ' overdue' : '');
-      due.dateTime = new Date(item.dueAt).toISOString();
-      due.setAttribute('data-due', String(item.dueAt));
-      due.title = formatDateTime(item.dueAt);
-      const prefix = overdue ? 'Vencida' : 'Vence';
-      due.textContent = `${prefix} ${relativeTime(item.dueAt)}`;
-      label.appendChild(due);
-
-      const dueExact = document.createElement('span');
-      dueExact.className = 'meta-exact';
-      dueExact.setAttribute('aria-hidden', 'true');
-      dueExact.textContent = ` — ${formatDateTime(item.dueAt)}`;
-      label.appendChild(dueExact);
     }
     if (item.editedAt) {
       const sep = document.createElement('span');
@@ -418,7 +301,6 @@
     e.preventDefault();
     addItem(input.value);
     input.value = '';
-    if (inputDue) inputDue.value = '';
     input.focus();
   });
 
@@ -441,3 +323,4 @@
   refreshRelativeTimes();
   setInterval(refreshRelativeTimes, 60000);
 })();
+
